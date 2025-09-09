@@ -5,8 +5,8 @@ from lightrag.utils import EmbeddingFunc
 from retrieval.base_retrieval import BaseRetrieval
 
 import os
-os.environ["http_proxy"] = "http://127.0.0.1:11434"
-os.environ["https_proxy"] = "http://127.0.0.1:11434"
+os.environ["http_proxy"] = ""
+os.environ["https_proxy"] = ""
 
 
 class VectorRetrieval(BaseRetrieval):
