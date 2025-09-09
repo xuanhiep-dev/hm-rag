@@ -13,9 +13,9 @@ class SummaryAgent:
         self.text_llm = Ollama(
             base_url="http://localhost:11434", model="qwen2.5:14b")
         self.processor = AutoProcessor.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", use_fast=True, cache_dir="./qwen_model")
+            "Qwen/Qwen2.5-VL-7B-Instruct", use_fast=True)
         self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto", cache_dir="./qwen_model")
+            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto")
 
     def summarize(self, problems, shot_qids, qid, cur_ans) -> str:
         problem = problems[qid]

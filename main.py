@@ -12,8 +12,8 @@ from openai import OpenAI
 from langchain_community.llms.ollama import Ollama
 
 import os
-os.environ["http_proxy"] = "http://127.0.0.1:11434"
-os.environ["https_proxy"] = "http://127.0.0.1:11434"
+os.environ["http_proxy"] = ""
+os.environ["https_proxy"] = ""
 
 
 def parse_args():
