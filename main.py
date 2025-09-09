@@ -15,6 +15,7 @@ import os
 os.environ["http_proxy"] = "http://127.0.0.1:11434"
 os.environ["https_proxy"] = "http://127.0.0.1:11434"
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_root', type=str)
@@ -22,9 +23,11 @@ def parse_args():
     parser.add_argument('--output_root', type=str)
     parser.add_argument('--caption_file', type=str)
     parser.add_argument('--model', type=str, default='gpt3')
-    parser.add_argument('--options', type=list, default=["A", "B", "C", "D", "E"])
+    parser.add_argument('--options', type=list,
+                        default=["A", "B", "C", "D", "E"])
     # user options
-    parser.add_argument('--test_split', type=str, default='test', choices=['test', 'val', 'minival'])
+    parser.add_argument('--test_split', type=str,
+                        default='test', choices=['test', 'val', 'minival'])
     parser.add_argument('--prompt_format',
                         type=str,
                         default='CQM-A',
@@ -48,13 +51,16 @@ def parse_args():
                         type=int,
                         default=512,
                         help='The maximum number of tokens allowed for the generated answer.')
+    parser.add_argument('--seed', type=int, default=42, help='random seed')
 
     args = parser.parse_args()
     return args
 
+
 def load_data(args):
     problems = json.load(open(os.path.join(args.data_root, 'problems.json')))
-    pid_splits = json.load(open(os.path.join(args.data_root, 'pid_splits.json')))
+    pid_splits = json.load(
+        open(os.path.join(args.data_root, 'pid_splits.json')))
     captions = json.load(open(args.caption_file))["captions"]
 
     for qid in problems:
@@ -69,7 +75,8 @@ def load_data(args):
     train_qids = pid_splits['train']
     if shot_qids == None:
         assert args.shot_number >= 0 and args.shot_number <= 32
-        shot_qids = random.sample(train_qids, args.shot_number)  # random sample
+        shot_qids = random.sample(
+            train_qids, args.shot_number)  # random sample
     else:
         shot_qids = [str(qid) for qid in shot_qids]
         for qid in shot_qids:
@@ -78,6 +85,7 @@ def load_data(args):
 
     return problems, qids, shot_qids
 
+
 def main():
     args = parse_args()
     print('====Input Arguments====')
@@ -85,9 +93,11 @@ def main():
 
     random.seed(args.seed)
 
-    problems, qids, shot_qids = load_data(args)  # probelms, test question ids, shot example ids
+    # probelms, test question ids, shot example ids
+    problems, qids, shot_qids = load_data(args)
 
-    result_file = args.output_root + '/' + args.label + '_' + args.test_split + '.json'
+    result_file = args.output_root + '/' + \
+        args.label + '_' + args.test_split + '.json'
     if not os.path.exists(args.output_root):
         os.makedirs(args.output_root)
 
@@ -105,7 +115,7 @@ def main():
             break
 
         problem = problems[qid]
- 
+
         answer = problem['answer']
         final_ans, all_messages = sum_agent.predict(problems, shot_qids, qid)
         outputs[qid] = all_messages
@@ -127,7 +137,6 @@ def main():
     print(f"Failed question ids: {failed}")
     print(f"Number of failed questions: {len(failed)}")
 
+
 if __name__ == "__main__":
     main()
-
-
