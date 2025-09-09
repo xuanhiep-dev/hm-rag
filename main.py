@@ -52,6 +52,18 @@ def parse_args():
                         default=512,
                         help='The maximum number of tokens allowed for the generated answer.')
     parser.add_argument('--seed', type=int, default=42, help='random seed')
+    parser.add_argument('--test_number', type=int, default=-1,
+                        help='Số lượng mẫu test (mặc định -1 = toàn bộ).')
+    parser.add_argument('--label', type=str, default='hmrag',
+                        help='Nhãn thí nghiệm để đặt tên file kết quả.')
+    parser.add_argument('--save_every', type=int, default=50,
+                        help='Lưu kết quả sau mỗi N mẫu.')
+    parser.add_argument('--shot_number', type=int, default=0,
+                        help='Số lượng mẫu few-shot để dùng trong prompt (0 = zero-shot).')
+    parser.add_argument('--shot_qids', type=list, default=None,
+                        help='Danh sách id câu hỏi để few-shot, mặc định random.')
+    parser.add_argument('--debug', action='store_true',
+                        help='Chạy chế độ debug (chỉ test 10 mẫu).')
 
     args = parser.parse_args()
     return args
