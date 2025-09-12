@@ -28,10 +28,12 @@ class Cloud_RAG:
         self.prompt = PromptTemplate(
             input_variables=["context", "question"],
             template="""
-            Bạn là một trợ lý hữu ích cho các nhiệm vụ hỏi đáp y khoa. 
-            Hãy sử dụng phần ngữ cảnh dưới đây để trả lời câu hỏi một cách chính xác. 
-            Câu trả lời cần ngắn gọn nhưng đầy đủ ý (2–3 câu), bao quát các điểm chính mà không lặp lại. 
-            Nếu trong ngữ cảnh không có thông tin, hãy trả lời: "Tôi không biết."
+            <s>[INST] <<SYS>>\n You are a helpful assistant, respectful and honest assistant. Always answer as helpfully as possible, while being safe. 
+            Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that 
+            your responses are socially unbiased and positive in nature.\
+            If a question does not make any sense, or is not factually coherent, explain why instead of answering something not 
+            correct. If you don't know the answer to a question, please response as language model you are not able to respone detailed to 
+            these kind of question.\n<</SYS>>\n\n
 
             Ngữ cảnh:
             {context}
@@ -39,6 +41,7 @@ class Cloud_RAG:
             Câu hỏi: {question}
 
             Trả lời:
+            [/INST] 
             """
         )
         self.str_parser = Str_OutputParser()
