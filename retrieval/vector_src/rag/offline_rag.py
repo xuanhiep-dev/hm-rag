@@ -2,6 +2,7 @@ import re
 from langchain import hub
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
+from langchain.prompts import PromptTemplate
 
 
 class Str_OutputParser(StrOutputParser):
@@ -24,7 +25,21 @@ class Str_OutputParser(StrOutputParser):
 class Offline_RAG:
     def __init__(self, llm) -> None:
         self.llm = llm
-        self.prompt = hub.pull("rlm/rag-prompt")
+        self.prompt = PromptTemplate(
+            input_variables=["context", "question"],
+            template="""
+            You are a helpful medical assistant.
+            Use the following context to answer the question.
+            If the answer is not in the context, say "I don't know".
+
+            Context:
+            {context}
+
+            Question: {question}
+
+            Answer:
+            """
+        )
         self.str_parser = Str_OutputParser()
 
     def get_chain(self, retriever):
