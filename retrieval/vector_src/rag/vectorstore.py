@@ -1,7 +1,7 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, Distance, VectorParams
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_qdrant import Qdrant as QdrantVectorStore
+from langchain_qdrant import QdrantVectorStore
 
 
 class VectorDB:
@@ -52,11 +52,18 @@ class VectorDB:
             points=points,
         )
 
-    def get_retriever(self, search_kwargs: dict = {"k": 5}):
-        """Trả về retriever hợp chuẩn LangChain"""
-        store = QdrantVectorStore.from_existing_collection(
-            embedding=self.embedding,
-            collection_name=self.collection_name,
+    def get_retriever(
+        self,
+        search_type: str = "similarity",
+        search_kwargs: dict = {"k": 10}
+    ):
+        vector_store = QdrantVectorStore(
             client=self.client,
+            collection_name=self.collection_name,
+            embedding=self.embedding,
         )
-        return store.as_retriever(search_kwargs=search_kwargs)
+        retriever = vector_store.as_retriever(
+            search_type=search_type,
+            search_kwargs=search_kwargs
+        )
+        return retriever
