@@ -31,6 +31,7 @@ class VectorDB:
             client=self.client,
             collection_name=self.collection_name,
             embedding=self.embedding,
+            content_payload_key="text"
         )
         retriever = vector_store.as_retriever(
             search_type=search_type,
