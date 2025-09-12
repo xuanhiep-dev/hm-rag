@@ -13,8 +13,7 @@ class VectorDB:
     ) -> None:
         self.collection_name = collection_name
         self.embedding = embedding or SentenceTransformer(
-            model_name="VoVanPhuc/sup-SimCSE-VietNamese-phobert-base"
-        )
+            "VoVanPhuc/sup-SimCSE-VietNamese-phobert-base")
 
         # Kết nối Qdrant Cloud / local
         self.client = QdrantClient(
