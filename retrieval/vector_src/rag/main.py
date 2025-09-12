@@ -3,12 +3,6 @@ from src.rag.file_loader import Loader
 from src.rag.vectorstore import VectorDB
 from src.rag.cloud_rag import Cloud_RAG
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
-QDRANT_URL = "https://b889a9b5-f641-48cd-bde4-b21a7baf2cd8.us-east4-0.gcp.cloud.qdrant.io:6333"
-QDRANT_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.GSFP7G4NBbSY_6RB3qpY02hZKXRmsJDfjYYxnxn5jAY"
-embedding_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2")
-
 
 class InputQA(BaseModel):
     question: str = Field(..., title="Question to ask the model")

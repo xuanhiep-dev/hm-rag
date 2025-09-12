@@ -27,12 +27,12 @@ class VectorDB:
                 documents=documents,
                 embedding=self.embedding,
                 collection_name=self.collection_name,
-                client=self.client
+                qdrant_client=self.client
             )
         else:
             # Nếu không có docs thì chỉ khởi tạo kết nối
             self.db = Qdrant(
-                client=self.client,
+                qdrant_client=self.client,
                 collection_name=self.collection_name,
                 embeddings=self.embedding
             )
