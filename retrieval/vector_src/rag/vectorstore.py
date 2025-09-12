@@ -1,5 +1,5 @@
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore
 
 
@@ -12,8 +12,9 @@ class VectorDB:
         embedding=None
     ) -> None:
         self.collection_name = collection_name
-        self.embedding = embedding or SentenceTransformer(
-            "VoVanPhuc/sup-SimCSE-VietNamese-phobert-base")
+        self.embedding = embedding or HuggingFaceEmbeddings(
+            model_name="VoVanPhuc/sup-SimCSE-VietNamese-phobert-base"
+        )
 
         # Kết nối Qdrant Cloud / local
         self.client = QdrantClient(
