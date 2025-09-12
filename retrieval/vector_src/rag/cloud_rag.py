@@ -21,8 +21,8 @@ class Str_OutputParser(StrOutputParser):
             return text_response
 
 
-# Class Offline RAG chain
-class Offline_RAG:
+# Class Cloud RAG chain
+class Cloud_RAG:
     def __init__(self, llm) -> None:
         self.llm = llm
         self.prompt = PromptTemplate(

@@ -1,22 +1,41 @@
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Qdrant
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from qdrant_client import QdrantClient
 
 
 class VectorDB:
     def __init__(
         self,
         documents=None,
-        embedding=HuggingFaceEmbeddings()
+        embedding=None,
+        collection_name: str = "my_collection",
+        qdrant_url: str = None,
+        qdrant_api_key: str = None,
     ) -> None:
-        self.embedding = embedding
-        self.db = self._build_db(documents)
+        self.embedding = embedding or HuggingFaceEmbeddings()
+        self.collection_name = collection_name
 
-    def _build_db(self, documents):
-        db = FAISS.from_documents(
-            documents=documents,
-            embedding=self.embedding
+        # Kết nối tới Qdrant Cloud
+        self.client = QdrantClient(
+            url=qdrant_url,
+            api_key=qdrant_api_key,
         )
-        return db
+
+        # Nếu có documents thì nạp vào Qdrant
+        if documents:
+            self.db = Qdrant.from_documents(
+                documents=documents,
+                embedding=self.embedding,
+                collection_name=self.collection_name,
+                client=self.client
+            )
+        else:
+            # Nếu không có docs thì chỉ khởi tạo kết nối
+            self.db = Qdrant(
+                client=self.client,
+                collection_name=self.collection_name,
+                embeddings=self.embedding
+            )
 
     def get_retriever(
         self,
