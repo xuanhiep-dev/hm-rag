@@ -39,7 +39,7 @@ class PDFLoader(BaseLoader):
         total_files = len(pdf_files)
 
         with multiprocessing.Pool(processes=num_processes) as pool:
-            with tqdm(total=total_files, desc="Loading PDFs", unit="file") as pbar:
+            with tqdm(total=total_files, desc="Tiến trình tải PDFs", unit="file") as pbar:
                 for result in pool.imap_unordered(load_pdf, pdf_files):
                     doc_loaded.extend(result)
                     pbar.update(1)

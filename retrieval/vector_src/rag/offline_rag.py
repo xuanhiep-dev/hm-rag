@@ -28,16 +28,17 @@ class Offline_RAG:
         self.prompt = PromptTemplate(
             input_variables=["context", "question"],
             template="""
-            You are a helpful medical assistant.
-            Use the following context to answer the question.
-            If the answer is not in the context, say "I don't know".
+            Bạn là một trợ lý hữu ích cho các nhiệm vụ hỏi đáp y khoa. 
+            Hãy sử dụng phần ngữ cảnh dưới đây để trả lời câu hỏi một cách chính xác. 
+            Câu trả lời cần ngắn gọn nhưng đầy đủ ý (2–3 câu), bao quát các điểm chính mà không lặp lại. 
+            Nếu trong ngữ cảnh không có thông tin, hãy trả lời: "Tôi không biết."
 
-            Context:
+            Ngữ cảnh:
             {context}
 
-            Question: {question}
+            Câu hỏi: {question}
 
-            Answer:
+            Trả lời:
             """
         )
         self.str_parser = Str_OutputParser()
