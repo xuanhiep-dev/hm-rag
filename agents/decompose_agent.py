@@ -1,105 +1,133 @@
-import os
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Callable
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain_community.llms import Ollama  # Import the Ollama class
-
-from langchain.agents import AgentExecutor, AgentType, initialize_agent
-from langchain.tools import Tool
+import re
+from typing import List
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
+from langchain.prompts import ChatPromptTemplate
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode, create_react_agent
 
 
 class DecomposeAgent:
-    def __init__(self, config):
-        self.config = config
-        # Use Ollama to connect to the locally deployed Qwen2.5-7B model
-        self.llm = Ollama(
-            model="qwen2.5:7b",  # Ensure the model name in Ollama is correct
-            temperature=0.35
+    def __init__(self):
+        # Load HuggingFace model (ví dụ Qwen2.5-3B từ HF)
+        model_name = "Qwen/Qwen2.5-3B-Instruct"  # đổi thành model bạn muốn
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype="auto"  # giảm RAM nếu cần
+        ).to("cuda:0")
+
+        # Tạo pipeline
+        hf_pipeline = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            max_new_tokens=512,
+            temperature=0.35,
+            device=0
         )
+
+        # LangChain wrapper
+        llm = HuggingFacePipeline(pipeline=hf_pipeline)
+        self.llm = ChatHuggingFace(llm=llm)
+
         self.tools = [
-            Tool(
-                name="Decompose",
-                func=self.decompose,
-                description="Decompose the query into sub-queries.",
-            )
+            {
+                "name": "Phân rã truy vấn",
+                "description": "Phân rã câu truy vấn thành các câu hỏi con độc lập.",
+                "func": self.decompose
+            }
         ]
-        self.agent = initialize_agent(
-            tools=self.tools,
-            llm=self.llm,
-            agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-            verbose=True,
-        )
+
+        # LangGraph agent
+        self.agent = create_react_agent(self.llm, self.tools)
 
     def count_intents(self, query: str) -> int:
         """
-        Determine the number of intents in the input query.
-        Use LLM to analyze the number of intents contained in the input text.
+        Xác định số lượng ý định (intents) trong câu truy vấn.
+        Sử dụng LLM để phân tích số ý định có trong văn bản đầu vào.
         Args:
-            query (str): The input query text.
+            query (str): câu truy vấn đầu vào.
         Returns:
-            int: The number of intents.
+            int: số ý định được phát hiện.
         """
-        # Clearly specify the prompt format
         prompt = PromptTemplate.from_template(
-            "Please calculate how many independent intents are contained in the following query. Return only an integer:\n{query}\nNumber of intents: "
+            "Hãy tính số lượng ý định (intent) độc lập có trong câu truy vấn sau. "
+            "Chỉ trả về một số nguyên duy nhất:\n{query}\nSố ý định: "
         )
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            chain = LLMChain(llm=self.llm, prompt=prompt)
-            response = chain.run(query=query)
-            try:
-                return int(response.strip())
-            except ValueError:
-                if attempt == max_attempts - 1:
-                    return 1  # If parsing fails after multiple attempts, default to 1 intent
+
+        chain = prompt | self.llm
+        for _ in range(3):
+            response = chain.invoke({"query": query})
+            match = re.search(r"\d+", response)
+            if match:
+                return int(match.group(0))
         return 1
 
     def decompose(self, query: str) -> List[str]:
         """
-        Decompose the query. If the number of intents is greater than 1, perform intent decomposition.
+        Phân rã câu truy vấn. 
+        Nếu số lượng ý định lớn hơn 1 thì tiến hành phân tách.
         Args:
-            query (str): The input query text.
+            query (str): câu truy vấn đầu vào.
         Returns:
-            List[str]: A list of decomposed sub-queries.
+            List[str]: danh sách các câu hỏi con đã phân tách.
         """
-        intent_count = self.count_intents(query)
-        intent_count = min(intent_count, 3)  # Limit the number of intents to a maximum of 5
+        # intent_count = self.count_intents(query)
+        # intent_count = min(intent_count, 3)
+        intent_count = 3
         if intent_count > 1:
-            return self._split_query(query)
-        # return [query]
-        return query
+            return self._split_query(query, intent_count)
+        return [query]
 
-    def _split_query(self, query: str) -> List[str]:
+    def _split_query(self, query: str, intent_count: int) -> List[str]:
         """
-        The method that actually performs query decomposition.
+        Thực hiện việc phân tách câu truy vấn thành các câu hỏi con.
         Args:
-            query (str): The input query text.
+            query (str): câu truy vấn đầu vào.
+            intent_count (int): số ý định cần phân rã.
         Returns:
-            List[str]: A list of decomposed sub-queries.
+            List[str]: danh sách câu hỏi con.
         """
-        prompt = PromptTemplate.from_template(
-            "Split the following query into multiple independent sub-queries, separated by '||', without additional explanations:\n{query}\nList of sub-queries: "
-        )
-        chain = LLMChain(llm=self.llm, prompt=prompt)
-        response = chain.run(query=query)
-        return [q.strip() for q in response.split("||") if q.strip()]
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "Bạn là một trợ lý AI hữu ích. "
+             "Nhiệm vụ của bạn là phân tách truy vấn thành các câu hỏi con. "
+             "Luôn trả lời bằng tiếng Việt, không sử dụng tiếng Anh."),
+            ("user",
+             "Hãy phân tách yêu cầu sau thành đúng {intent_count} câu hỏi con độc lập. "
+             "Mỗi câu hỏi phải là một câu hoàn chỉnh bằng tiếng Việt. "
+             "Không được viết lại theo nhiều cách khác nhau. "
+             "Không giải thích. "
+             "Chỉ xuất kết quả theo đúng định dạng sau:\n\n"
+             "<câu hỏi con 1>\n"
+             "<câu hỏi con 2>\n"
+             "<câu hỏi con 3>\nKẾT THÚC\n\n"
+             "Truy vấn: {query}\n\n"
+             "Các câu hỏi con:")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({"query": query, "intent_count": intent_count})
+        resp_text = response.content if hasattr(
+            response, "content") else str(response)
+        resp_text = resp_text.split("<|im_start|>assistant", 1)[-1]
+        matches = [line.strip("-• \t")
+                   for line in resp_text.splitlines() if line.strip()]
+
+        return matches
 
 
 # def run_decomposition(agent: DecomposeAgent, query: str) -> List[str]:
 #     return agent.decompose(query)
 
 
-# # ---------------------- Run tests ----------------------
+# ---------------------- Run tests ----------------------
 # if __name__ == "__main__":
-#     class MockConfig:
-#         pass
-#     config = MockConfig()
-#     agent = DecomposeAgent(config)
-#     query = "Check today's weather in Shanghai, then summarize the latest scientific research news from Fudan University, and finally compare the advantages and disadvantages of Python and Java."
+#     agent = DecomposeAgent()
+#     query = """Kiểm tra thời tiết hôm nay ở Thượng Hải, sau đó tóm tắt những tin khoa học mới nhất từ Đại học Fudan,
+#         và cuối cùng so sánh ưu điểm và nhược điểm của Python và Java."""
 #     subqueries = run_decomposition(agent, query)
-#     print("Decomposed sub-queries:")
+#     print("Những yêu cầu cần thực hiện:")
 #     for i, subq in enumerate(subqueries, 1):
 #         print(f"{i}. {subq}")
