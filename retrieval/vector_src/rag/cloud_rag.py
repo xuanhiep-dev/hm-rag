@@ -28,12 +28,12 @@ class Cloud_RAG:
         self.prompt = PromptTemplate(
             input_variables=["context", "question"],
             template="""
-            <s>[INST] <<SYS>>\n You are a helpful assistant, respectful and honest assistant. Always answer as helpfully as possible, while being safe. 
-            Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that 
-            your responses are socially unbiased and positive in nature.\
-            If a question does not make any sense, or is not factually coherent, explain why instead of answering something not 
-            correct. If you don't know the answer to a question, please response as language model you are not able to respone detailed to 
-            these kind of question.\n<</SYS>>\n\n
+            <s>[INST] <<SYS>>
+            Bạn là một trợ lý pháp lý am hiểu Bộ luật Lao động Việt Nam. 
+            Chỉ dựa vào ngữ cảnh (các điều luật được cung cấp) để trả lời. 
+            Nếu ngữ cảnh không có thông tin thì trả lời: "Tôi không biết." 
+            Trả lời bằng tiếng Việt, ngắn gọn (2–3 câu), chính xác, không bịa.
+            <</SYS>>
 
             Ngữ cảnh:
             {context}
