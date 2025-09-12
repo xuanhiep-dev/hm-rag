@@ -1,7 +1,7 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, Distance, VectorParams
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_qdrant import Qdrant as QdrantVectorStore
 
 
 class VectorDB:
@@ -53,5 +53,10 @@ class VectorDB:
         )
 
     def get_retriever(self, search_kwargs: dict = {"k": 5}):
-        """Trả về retriever để dùng trong RAG chain"""
-        return VectorStoreRetriever(vectorstore=self, search_kwargs=search_kwargs)
+        """Trả về retriever hợp chuẩn LangChain"""
+        store = QdrantVectorStore.from_existing_collection(
+            embedding=self.embedding,
+            collection_name=self.collection_name,
+            client=self.client,
+        )
+        return store.as_retriever(search_kwargs=search_kwargs)
