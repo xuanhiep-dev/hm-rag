@@ -11,7 +11,7 @@ class DecomposeAgent:
     def __init__(self, config=None):
         self.config = config
         # Load HuggingFace model (ví dụ Qwen2.5-3B từ HF)
-        model_name = "Qwen/Qwen2.5-3B-Instruct"  # đổi thành model bạn muốn
+        model_name = "Qwen/Qwen2.5-1.8B-Instruct"  # đổi thành model bạn muốn
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
