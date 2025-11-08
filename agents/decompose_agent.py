@@ -2,7 +2,7 @@ import re
 from typing import List
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode, create_react_agent
 
