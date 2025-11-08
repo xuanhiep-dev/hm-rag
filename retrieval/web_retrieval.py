@@ -49,10 +49,23 @@ class WebRetrieval(BaseRetrieval):
         self.results = self.client.results(query)
         self.results = self.format_results(self.results)
         # self.results = self.generation(self.results + "\n" + query)
+        # Đảm bảo self.results và query đều là string
         if isinstance(self.results, list):
-            joined_results = "\n".join(self.results)
+            joined_results = "\n".join(map(str, self.results))
         else:
             joined_results = str(self.results)
 
-        self.results = self.generation(joined_results + "\n" + query)
+        if isinstance(query, list):
+            query = "\n".join(map(str, query))
+        else:
+            query = str(query)
+
+        try:
+            self.results = self.generation(joined_results + "\n" + query)
+        except Exception as e:
+            import traceback
+            print("⚠️ Lỗi trong self.generation:", e)
+            traceback.print_exc()
+            self.results = "Không thể sinh câu trả lời từ web."
+
         return self.results
