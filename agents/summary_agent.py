@@ -38,9 +38,15 @@ class SummaryAgent:
                     self.config.image_root, split, qid, image)
             else:
                 image_path = ""
-            output_text = cur_ans[0]
-            output_graph = cur_ans[1]
-            output_web = cur_ans[2]
+            # output_text = cur_ans[0]
+            # output_graph = cur_ans[1]
+            # output_web = cur_ans[2]
+            output_text = cur_ans[0] if len(
+                cur_ans) > 0 else "Không có kết quả Vector."
+            output_graph = cur_ans[1] if len(
+                cur_ans) > 1 else "Không có kết quả Graph."
+            output_web = cur_ans[2] if len(
+                cur_ans) > 2 else "Không có kết quả Web."
             output = self.refine(output_text, output_graph, output_web,
                                  problems, shot_qids, qid, self.config, image_path)
             if output == None:

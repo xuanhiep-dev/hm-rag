@@ -49,13 +49,14 @@ class WebRetrieval(BaseRetrieval):
         Sinh tóm tắt hoặc câu trả lời từ kết quả web retrieval.
         """
         try:
-            if hasattr(self.llm, "generate"):
-                answer = self.llm.generate(results)
-            elif hasattr(self.llm, "chat"):
-                answer = self.llm.chat(results)
-            else:
-                raise TypeError(f"Không thể gọi LLM, type={type(self.llm)}")
+            # LangChain yêu cầu đầu vào là list[str]
+            answer = self.llm.generate([results])
+
+            # Trích text đầu ra
+            if hasattr(answer, "generations"):
+                return answer.generations[0][0].text
             return str(answer)
+
         except Exception as e:
             import traceback
             print("⚠️ Lỗi trong self.generation:", e)
