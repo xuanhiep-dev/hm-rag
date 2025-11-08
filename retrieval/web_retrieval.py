@@ -48,5 +48,11 @@ class WebRetrieval(BaseRetrieval):
     def find_top_k(self, query):
         self.results = self.client.results(query)
         self.results = self.format_results(self.results)
-        self.results = self.generation(self.results + "\n" + query)
+        # self.results = self.generation(self.results + "\n" + query)
+        if isinstance(self.results, list):
+            joined_results = "\n".join(self.results)
+        else:
+            joined_results = str(self.results)
+
+        self.results = self.generation(joined_results + "\n" + query)
         return self.results
