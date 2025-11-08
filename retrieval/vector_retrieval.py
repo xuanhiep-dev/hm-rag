@@ -1,44 +1,71 @@
 from lightrag import LightRAG, QueryParam
-from lightrag.llm.ollama import ollama_model_complete, ollama_embed
 from lightrag.utils import EmbeddingFunc
-
 from retrieval.base_retrieval import BaseRetrieval
-
-import os
-os.environ["http_proxy"] = ""
-os.environ["https_proxy"] = ""
+from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM
+import torch
 
 
 class VectorRetrieval(BaseRetrieval):
     def __init__(self, config):
         self.config = config
 
+        # ─────────────────────────────
+        # 🧠 Dùng model Hugging Face thay Ollama
+        # ─────────────────────────────
+        embed_model_name = getattr(
+            config, "embed_model_name", "sentence-transformers/all-MiniLM-L6-v2")
+        llm_model_name = getattr(
+            config, "llm_model_name", "Qwen/Qwen2.5-0.5B-Instruct")
+
+        # Embedding model (text -> vector)
+        from sentence_transformers import SentenceTransformer
+        self.embed_model = SentenceTransformer(embed_model_name)
+
+        # LLM model (nếu cần xử lý query hoặc reasoning)
+        self.tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
+        self.llm_model = AutoModelForCausalLM.from_pretrained(
+            llm_model_name,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
+
+        # ─────────────────────────────
+        # 🔧 Khởi tạo LightRAG với embedding Hugging Face
+        # ─────────────────────────────
         self.client = LightRAG(
             working_dir=self.config.working_dir,
-            llm_model_func=ollama_model_complete,
-            llm_model_name=self.config.llm_model_name,
-            llm_model_max_async=160,
-            # llm_model_max_token_size=65536,
-            llm_model_kwargs={"host": "http://localhost:11434",
-                              "options": {"num_ctx": 65536}},
+            llm_model_func=self._local_llm_complete,  # custom HF completion
+            llm_model_name=llm_model_name,
+            llm_model_max_async=64,
             embedding_func=EmbeddingFunc(
-                embedding_dim=768,
+                embedding_dim=self.embed_model.get_sentence_embedding_dimension(),
                 max_token_size=8192,
-                func=lambda texts: ollama_embed(
-                    texts, embed_model="nomic-embed-text", host="http://localhost:11434"
-                ),
+                func=lambda texts: self.embed_model.encode(
+                    texts, convert_to_numpy=True).tolist(),
             ),
         )
         self.results = []
 
+    # ─────────────────────────────
+    # 🧩 Tạo hàm thay thế cho ollama_model_complete
+    # ─────────────────────────────
+    def _local_llm_complete(self, prompt: str) -> str:
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(
+            self.llm_model.device)
+        outputs = self.llm_model.generate(
+            **inputs,
+            max_new_tokens=512,
+            temperature=0.3
+        )
+        text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return text
+
+    # ─────────────────────────────
+    # 🔍 Tìm kiếm vector + reasoning
+    # ─────────────────────────────
     def find_top_k(self, query):
-        # self.results = self.client.query(query,
-        #  param=QueryParam(mode=self.config.mode,
-        #                   top_k=self.config.top_k),
-        #  param=QueryParam(mode="naive"))
-        prompt = "Context: N/A\nQuestion: Which figure of speech is used in this text?\nSing, O goddess, the anger of Achilles son of Peleus, that brought countless ills upon the Achaeans.\n—Homer, The Iliad\nOptions: (A) chiasmus (B) apostrophe\nAnswer:\nSummary the output with format 'Answer: The answer is A, B, C, D, E or FAILED. \n BECAUSE: '"
-        self.results = self.client.query(prompt,
-                                         #  param=QueryParam(mode=self.config.mode))
-                                         #  , top_k=self.config.top_k))
-                                         param=QueryParam(mode="naive"))
+        # Nếu cần custom prompt: có thể thêm phần Context / Question ở đây
+        param = QueryParam(mode=getattr(self.config, "mode",
+                           "naive"), top_k=self.config.top_k)
+        self.results = self.client.query(query, param=param)
         return self.results

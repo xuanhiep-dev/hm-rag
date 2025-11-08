@@ -1,8 +1,8 @@
 from collections import Counter
-from langchain_community.llms.ollama import Ollama
-import re
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
+import torch
+import re
 import random
 import os
 
@@ -10,139 +10,127 @@ import os
 class SummaryAgent:
     def __init__(self, config):
         self.config = config
-        self.text_llm = Ollama(
-            base_url="http://localhost:11434", model="qwen2.5:14b")
-        self.processor = AutoProcessor.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", use_fast=True)
-        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto")
 
+        # Dùng Qwen-VL làm cả mô hình tóm tắt văn bản + xử lý hình ảnh
+        model_id = "Qwen/Qwen2.5-VL-3B-Instruct"
+        self.processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
+        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
+
+    # ===============================
+    # Summarization pipeline
+    # ===============================
     def summarize(self, problems, shot_qids, qid, cur_ans) -> str:
         problem = problems[qid]
-        question = problem['question']
-        choices = problem["choices"]
-        answer = problem['answer']
-        image = problem['image']
-        caption = problem['caption']
-        split = problem["split"]
+        question, choices = problem["question"], problem["choices"]
+        answer, image, caption, split = (
+            problem["answer"],
+            problem["image"],
+            problem["caption"],
+            problem["split"],
+        )
 
         most_ans = self.get_most_common_answer(cur_ans)
-        # Placeholder for summarization logic
+
         if len(most_ans) == 1:
-            prediction = self.get_result(most_ans[0])  # 'A', ..., 'E'
+            prediction = self.get_result(most_ans[0])
             pred_idx = self.get_pred_idx(
                 prediction, choices, self.config.options)
         else:
-            if image == "image.png":
-                image_path = os.path.join(
-                    self.config.image_root, split, qid, image)
-            else:
-                image_path = ""
-            # output_text = cur_ans[0]
-            # output_graph = cur_ans[1]
-            # output_web = cur_ans[2]
+            image_path = (
+                os.path.join(self.config.image_root, split, qid, image)
+                if image and image != "image.png"
+                else ""
+            )
+
             output_text = cur_ans[0] if len(
                 cur_ans) > 0 else "Không có kết quả Vector."
             output_graph = cur_ans[1] if len(
                 cur_ans) > 1 else "Không có kết quả Graph."
             output_web = cur_ans[2] if len(
                 cur_ans) > 2 else "Không có kết quả Web."
-            output = self.refine(output_text, output_graph, output_web,
-                                 problems, shot_qids, qid, self.config, image_path)
-            if output == None:
-                output = "FAILD"
-            print(f"output: {output}")
+
+            output = self.refine(
+                output_text, output_graph, output_web, problems, shot_qids, qid, self.config, image_path
+            )
+            output = output or "FAILED"
+            print(f"[SummaryAgent] output: {output}")
 
             ans_fusion = self.get_result(output)
             pred_idx = self.get_pred_idx(
                 ans_fusion, choices, self.config.options)
+
         return pred_idx, cur_ans
 
-    def get_most_common_answer(slef, res):
-        """
-        Get the most common answer from the list of answers
-        """
+    # ===============================
+    # Helper functions
+    # ===============================
+    def get_most_common_answer(self, res):
         counter = Counter(res)
-
-        # 获取最高频率
         max_count = max(counter.values())
-
-        # 收集所有频率等于 max_count 的值
-        most_common_values = [item for item,
-                              count in counter.items() if count == max_count]
-        return most_common_values
+        return [k for k, v in counter.items() if v == max_count]
 
     def refine(self, output_text, output_graph, output_web, problems, shot_qids, qid, args, image_path):
-
-        prompt = build_prompt(problems, shot_qids, qid, args)
-        # prompt = f"{prompt} \n Output1: {output_text}. \n Output2: {output_graph} \n Output3: {output_web}. Summary the outputs with  chain-of-thought with format 'Answer: The answer is A, B, C, D, E or FAILED. \n BECAUSE: '"
-        prompt = f"{prompt} The answer is A, B, C, D, E or FAILED. \n BECAUSE: "
+        # ---- Build prompt ----
+        prompt = f"""
+Câu hỏi: {problems[qid]['question']}
+Các câu trả lời có thể: {problems[qid]['choices']}
+Dưới đây là ba câu trả lời từ các tác nhân khác nhau:
+1. Vector Retrieval: {output_text}
+2. Graph Retrieval: {output_graph}
+3. Web Retrieval: {output_web}
+Hãy hợp nhất thông tin này và chọn đáp án đúng nhất (A,B,C,D,E hoặc FAILED).
+Giải thích ngắn gọn: 
+"""
+        # ---- Text-only mode ----
         if not image_path:
-            output = self.text_llm.invoke(prompt)
+            return self.qwen_generate(prompt)
 
-        else:
-            output = self.qwen_reasoning(prompt, image_path)
-            print(f"**** output: {output}")
-            output = self.text_llm.invoke(
-                f"{output[0]} Summary the above information with format 'Answer: The answer is A, B, C, D, E or FAILED.    \n BECAUSE: '")
+        # ---- Vision-Language reasoning ----
+        output = self.qwen_reasoning(prompt, image_path)
+        return output[0] if isinstance(output, list) else output
 
-        return output
+    def qwen_generate(self, text_prompt: str):
+        # Dùng Qwen-VL nhưng chỉ xử lý text
+        messages = [{"role": "user", "content": [
+            {"type": "text", "text": text_prompt}]}]
+        txt = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(
+            text=[txt], padding=True, return_tensors="pt").to(self.model.device)
+        out_ids = self.model.generate(**inputs, max_new_tokens=1024)
+        trim = [out[len(inp):] for inp, out in zip(inputs.input_ids, out_ids)]
+        decoded = self.processor.batch_decode(trim, skip_special_tokens=True)
+        return decoded[0]
 
     def get_result(self, output):
-        # extract the answer
-        # pattern = re.compile(r'The answer is ([A-Z]).')
-        pattern = re.compile(r'The answer is ([A-E])')
+        pattern = re.compile(r"[Aa]nswer\s*is\s*([A-E])")
         res = pattern.findall(output)
-        if len(res) == 1:
-            answer = res[0]  # 'A', 'B', ...
-        else:
-            answer = "FAILED"
-
-        return answer
+        return res[0] if len(res) == 1 else "FAILED"
 
     def get_pred_idx(self, prediction, choices, options):
-        """
-        Get the index (e.g. 2) from the prediction (e.g. 'C')
-        """
-        if prediction in options[:len(choices)]:
-            return options.index(prediction)
-        else:
-            return random.choice(range(len(choices)))
+        return options.index(prediction) if prediction in options[: len(choices)] else random.randrange(len(choices))
 
     def qwen_reasoning(self, prompt, image_path):
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "image",
-                        "image": image_path,
-                    },
+                    {"type": "image", "image": image_path},
                     {"type": "text", "text": prompt},
                 ],
             }
         ]
-
-        # Preparation for inference
         text = self.processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+            messages, tokenize=False, add_generation_prompt=True)
         image_inputs, video_inputs = process_vision_info(messages)
         inputs = self.processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
-        inputs = inputs.to(self.model.device)
-
-        # Inference: Generation of the output
-        generated_ids = self.model.generate(**inputs, max_new_tokens=2048)
-        generated_ids_trimmed = [
-            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-        ]
-        output_text = self.processor.batch_decode(
-            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )
-        return output_text
+            text=[text], images=image_inputs, videos=video_inputs, padding=True, return_tensors="pt"
+        ).to(self.model.device)
+        out_ids = self.model.generate(**inputs, max_new_tokens=2048)
+        trim = [out[len(inp):] for inp, out in zip(inputs.input_ids, out_ids)]
+        decoded = self.processor.batch_decode(trim, skip_special_tokens=True)
+        return decoded

@@ -1,89 +1,118 @@
-
 from langchain_community.utilities import GoogleSerperAPIWrapper
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from langchain_community.llms import Ollama
-
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from retrieval.base_retrieval import BaseRetrieval
+import torch
+import traceback
 
 
 class WebRetrieval(BaseRetrieval):
     def __init__(self, config):
         self.config = config
-        self.search_engine = "Google"  # Default search engine
+        self.search_engine = "Google"
+
+        # ─────────────────────────────
+        # 🔍 Search Engine
+        # ─────────────────────────────
         self.client = GoogleSerperAPIWrapper(
             serper_api_key=self.config.serper_api_key,
             gl="cn",
-            hhl="en",
+            hl="en",
             num=self.config.top_k
         )
-        self.generator = self.config.llm_model_name
 
-        self.llm = Ollama(
-            model="qwen2.5:7b",
+        # ─────────────────────────────
+        # 🧠 Language Model (HuggingFace)
+        # ─────────────────────────────
+        model_name = getattr(config, "llm_model_name",
+                             "Qwen/Qwen2.5-0.5B-Instruct")
+        print(f"[WebRetrieval] Using model: {model_name}")
+
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16,
+                device_map="auto"
+            )
+        except Exception as e:
+            print(
+                "⚠️ Không thể tải model lớn, fallback sang model nhỏ 'Qwen/Qwen2.5-0.5B-Instruct'")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                "Qwen/Qwen2.5-0.5B-Instruct")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                "Qwen/Qwen2.5-0.5B-Instruct",
+                torch_dtype=torch.float16,
+                device_map="auto"
+            )
+
+        # Tạo pipeline sinh văn bản
+        self.pipe = pipeline(
+            "text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer,
+            max_new_tokens=256,
             temperature=0.35,
+            device=0 if torch.cuda.is_available() else -1
         )
+
         self.results = []
 
+    # ─────────────────────────────
+    # 🔎 Format kết quả tìm kiếm
+    # ─────────────────────────────
     def format_results(self, results):
-        """Format the search results"""
-        max_results = 1
+        max_results = 3
         processed = []
         if 'organic' in results:
             for item in results['organic'][:max_results]:
                 processed.append(
-                    f"[{item.get('title', 'No title')}]\n{item.get('snippet', 'No snippet')}\nLink:{item.get('link')}\n")
+                    f"[{item.get('title', 'No title')}]\n"
+                    f"{item.get('snippet', 'No snippet')}\n"
+                    f"Link: {item.get('link')}\n"
+                )
 
         if 'answerBox' in results:
             answer = results['answerBox']
             processed.insert(
-                0, f"Direct answer：{answer.get('answer', '')}\nSource:{answer.get('link', '')}\n")
+                0, f"Direct answer: {answer.get('answer', '')}\nSource: {answer.get('link', '')}\n"
+            )
 
-        return "\n".join(processed) or "No relevant results found"
+        return "\n".join(processed) or "No relevant results found."
 
-    # def generation(self, results):
-    #     # 使用 Ollama 模型生成回答
-    #     answer = self.llm(results)
-    #     return answer
+    # ─────────────────────────────
+    # 🧩 Sinh tóm tắt bằng HF pipeline
+    # ─────────────────────────────
     def generation(self, results):
-        """
-        Sinh tóm tắt hoặc câu trả lời từ kết quả web retrieval.
-        """
         try:
-            # LangChain yêu cầu đầu vào là list[str]
-            answer = self.llm.generate([results])
-
-            # Trích text đầu ra
-            if hasattr(answer, "generations"):
-                return answer.generations[0][0].text
-            return str(answer)
-
+            prompt = (
+                "Tóm tắt ngắn gọn nội dung dưới đây bằng tiếng Việt:\n"
+                f"{results}\n\n"
+                "→ Trả lời súc tích, có liên quan trực tiếp đến câu hỏi."
+            )
+            out = self.pipe(prompt)[0]["generated_text"]
+            return out
         except Exception as e:
-            import traceback
             print("⚠️ Lỗi trong self.generation:", e)
             traceback.print_exc()
-            return None
+            return "Không thể sinh câu trả lời từ web."
 
+    # ─────────────────────────────
+    # 🔍 Tìm kiếm top-k và sinh câu trả lời
+    # ─────────────────────────────
     def find_top_k(self, query):
-        self.results = self.client.results(query)
-        self.results = self.format_results(self.results)
-        # self.results = self.generation(self.results + "\n" + query)
-        # Đảm bảo self.results và query đều là string
-        if isinstance(self.results, list):
-            joined_results = "\n".join(map(str, self.results))
-        else:
-            joined_results = str(self.results)
-
-        if isinstance(query, list):
-            query = "\n".join(map(str, query))
-        else:
-            query = str(query)
-
         try:
-            self.results = self.generation(joined_results + "\n" + query)
-        except Exception as e:
-            import traceback
-            print("⚠️ Lỗi trong self.generation:", e)
-            traceback.print_exc()
-            self.results = "Không thể sinh câu trả lời từ web."
+            search_results = self.client.results(query)
+            formatted = self.format_results(search_results)
 
-        return self.results
+            # Chuẩn hóa kiểu dữ liệu
+            query_text = query if isinstance(
+                query, str) else "\n".join(map(str, query))
+            joined_text = formatted + "\n\nCâu hỏi: " + query_text
+
+            summary = self.generation(joined_text)
+            self.results = summary
+            return summary
+        except Exception as e:
+            print("⚠️ Lỗi trong find_top_k:", e)
+            traceback.print_exc()
+            return "Không thể tìm kiếm hoặc tóm tắt nội dung web."
