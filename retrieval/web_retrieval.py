@@ -52,7 +52,6 @@ class WebRetrieval(BaseRetrieval):
             tokenizer=self.tokenizer,
             max_new_tokens=256,
             temperature=0.35,
-            device=0 if torch.cuda.is_available() else -1
         )
 
         self.results = []
