@@ -40,10 +40,27 @@ class WebRetrieval(BaseRetrieval):
 
         return "\n".join(processed) or "No relevant results found"
 
+    # def generation(self, results):
+    #     # 使用 Ollama 模型生成回答
+    #     answer = self.llm(results)
+    #     return answer
     def generation(self, results):
-        # 使用 Ollama 模型生成回答
-        answer = self.llm(results)
-        return answer
+        """
+        Sinh tóm tắt hoặc câu trả lời từ kết quả web retrieval.
+        """
+        try:
+            if hasattr(self.llm, "generate"):
+                answer = self.llm.generate(results)
+            elif hasattr(self.llm, "chat"):
+                answer = self.llm.chat(results)
+            else:
+                raise TypeError(f"Không thể gọi LLM, type={type(self.llm)}")
+            return str(answer)
+        except Exception as e:
+            import traceback
+            print("⚠️ Lỗi trong self.generation:", e)
+            traceback.print_exc()
+            return None
 
     def find_top_k(self, query):
         self.results = self.client.results(query)

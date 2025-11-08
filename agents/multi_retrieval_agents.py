@@ -25,6 +25,10 @@ class MRetrievalAgent():
         graph_response = self.graph_retrieval.find_top_k(question)
         web_response = self.web_retrieval.find_top_k(question)
 
+        vector_response = vector_response or "Không có kết quả từ Vector Retrieval."
+        web_response = web_response or "Không có kết quả từ Web Retrieval."
+        graph_response = graph_response or "Không có kết quả từ Graph Retrieval."
+
         all_messages = ["Vector Retrieval Agent:\n" + vector_response + "\n",
                         "Graph Retrieval Agent:\n" + graph_response + "\n"
                         "Graph Retrieval Agent:\n" + graph_response + "\n"]
