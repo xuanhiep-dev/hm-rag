@@ -66,17 +66,22 @@ class GraphRetrieval(BaseRetrieval):
     # 🔍 Truy vấn đồ thị
     # ─────────────────────────────
     def find_top_k(self, query):
-        """
-        Truy vấn thông tin dạng quan hệ (graph retrieval)
-        """
         try:
             param = QueryParam(
                 mode=getattr(self.config, "mode", "mix"),
                 top_k=getattr(self.config, "top_k", 3)
             )
-
             self.results = self.client.query(query, param=param)
-            return self.results
+
+            # 🔧 Normalize để downstream luôn nhận str
+            if self.results is None:
+                self.results = ""
+            elif isinstance(self.results, list):
+                self.results = "\n".join(map(str, self.results))
+            else:
+                self.results = str(self.results)
+
+            return self.results.strip()
         except Exception as e:
             print(f"⚠️ Lỗi trong GraphRetrieval.find_top_k: {e}")
-            return []
+            return ""
